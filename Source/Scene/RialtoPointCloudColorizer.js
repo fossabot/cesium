@@ -34,6 +34,9 @@ define([
 
     // each ramp is a list of Stops
     // a Stop is a list with two elements, the stop point and a color-triplet
+    //
+    // These were taken directly from somewhere on the web -- I think the QGIS
+    // sources, but I'm not positive.
     var _colorRamps = {
         //"native": [],
         "Blues": [[0.00, [247, 251, 255]], [0.13, [222, 235, 247]], [0.26, [198, 219, 239]], [0.39, [158, 202, 225]], [0.52, [107, 174, 214]], [0.65, [66, 146, 198]], [0.78, [33, 113, 181]], [0.90, [8, 81, 156]], [1.00, [8, 48, 107]]],
@@ -88,11 +91,12 @@ define([
     };
 
 
+    // Given an array of values, create an RGB array with the right scalings.
+    //
     // rampType is string
     // dataArray is a typed array
     // zmin, zmax are doubles
     // rgbaArray is Uint8Array of r,g,b,a
-
     RialtoPointCloudColorizer.prototype.run = function (rampName, dataArray, numPoints, zmin, zmax, rgbaArray) {
         'use strict';
 
@@ -195,5 +199,5 @@ define([
     };
 
 
-return RialtoPointCloudColorizer;
+    return RialtoPointCloudColorizer;
 });

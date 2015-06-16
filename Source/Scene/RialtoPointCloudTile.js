@@ -43,7 +43,13 @@ define([
     ) {
     "use strict";
 
-    
+    // ctor
+    //
+    // provider: the RialtoPointCloudProvider for this tile
+    //
+    // level (int): the resolution level of this tile
+    // x: the col number of this tile
+    // y: the row number of this tile
     var RialtoPointCloudTile = function RialtoPointCloudTile(provider, level, x, y) {
         this._provider = provider;
         this._x = x;
@@ -113,7 +119,9 @@ define([
     });
 
 
-    // sets this.ready when done
+    // Loads the points from the database/server for this tile.
+    //
+    // Sets this.ready when done
     RialtoPointCloudTile.prototype.load = function() {
        "use strict";
 
@@ -121,6 +129,7 @@ define([
 
         var that = this;
 
+        // get the blob from the server
         loadBlob(this.url).then(function (blob) {
             //console.log("got blob for " + that.name + ", size=" + blob.size);
 
@@ -131,6 +140,9 @@ define([
                 throw new DeveloperError("Rialto Error: returned blob for tile is too short: " + blob.size + " bytes");
             }
 
+            // copy the returned blob into our local points structure
+            // (this.dimensions), colorize the rgba dimension, and create
+            // the Cesium primitive
             var reader = new FileReader();
             reader.addEventListener("loadend", function () {
                 var buffer = reader.result;
@@ -159,9 +171,10 @@ define([
             throw new DeveloperError("Rialto Error: buffer null: " + name);
         }
 
-        // first 4 bytes is number of points
-        // next 4 bytes is mask
-        // remaining bytes are the points
+        // The server's returned blob:
+        //   first 4 bytes is number of points
+        //   next 4 bytes is mask
+        //   remaining bytes are the points, in xyzxyzxyz order
 
         var uints = new Uint32Array(buffer, 0, 2);
         var numUints = uints.length;
@@ -175,14 +188,18 @@ define([
         //console.log("num bytes in point data=" + numBytes);
 
         if (numBytes > 0) {
+            // make our local copy of the points
             var dv = new DataView(buffer, 8, numBytes);
             this._createDimensionArrays(dv, numBytes);
         } else {
+            // we have an empty tile
             this._createDimensionArrays(null, 0);
         }
     };
 
 
+    // Given an array of bytes in xyzxyzxyz order, pull out each dimension of
+    // each point and store it in our local dimensions map as the right type.
     RialtoPointCloudTile.prototype._createDimensionArrays = function (dataview, numBytes) {
         "use strict";
 
@@ -234,7 +251,7 @@ define([
 
 
     // Dataview is an array-of-structs: x0, y0, z0, t0, x1, y1, ...
-    // Create an array of all the elements from one of the struct fields
+    // Create an array of all the elements from one of the struct fields, e.g. Y
     RialtoPointCloudTile.prototype._extractDimensionArray = function (dataview, datatype, offset, stride, len) {
         "use strict";
 
@@ -308,6 +325,7 @@ define([
         return dst;
     };
 
+
     RialtoPointCloudTile.prototype._setChildren = function (mask) {
 
         this._childTileMask = mask;
@@ -331,7 +349,10 @@ define([
     }
 
 
-    // taken from Cartesian3.fromDegreesArrayHeights
+    // Given three arrays of cartographic triples, construct a single array
+    // of cartesian triples.
+    //
+    // (taken from Cartesian3.fromDegreesArrayHeights)
     RialtoPointCloudTile.prototype.Cartesian3_fromDegreesArrayHeights_merge = function (x, y, z, cnt, ellipsoid) {
         "use strict";
 
@@ -359,8 +380,8 @@ define([
     };
 
 
-    // x,y,z as F64 arrays
-    // rgba as U8 array
+    // x,y,z are presumed to be F64 arrays
+    // rgba is presumed to an U8 array
     RialtoPointCloudTile.prototype.createPrimitive = function (cnt, dims) {
         "use strict";
 
@@ -402,6 +423,10 @@ define([
     };
 
 
+    // colorize the colorization dimension, using the scaling info
+    // from the header
+    //
+    // The special "rgba" dimension is what we're going to display.
     RialtoPointCloudTile.prototype.colorize = function () {
 
         var headerDims = this._provider.header.dimensions;
@@ -438,5 +463,5 @@ define([
     };
 
 
-return RialtoPointCloudTile;
+    return RialtoPointCloudTile;
 });
