@@ -65,3 +65,14 @@ existing Cesium v1.0 files, we only added several new files:
   * Added two files for the Rialto sample app:
     * `Apps/Sandcastle/gallery/RialtoPointCloud.html`
     * `Apps/Sandcastle/gallery/RialtoPointCloud.jpg`
+
+
+    
+Getting Help
+============
+
+Confused, baffled, or puzzled? Feel free to submit an Issue at
+[https://github.com/radiantbluetechnologies/rialto-cesium/issues] or
+just email me at mpg@flaxen.com.
+
+-mpg
