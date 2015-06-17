@@ -32,6 +32,7 @@ define([
         '../Core/GeographicTilingScheme',
         '../Scene/QuadtreeTileLoadState',
         '../Scene/QuadtreeTileProvider',
+        '../Scene/RialtoPointCloudColorizer',
         '../Scene/RialtoPointCloudTile',
         '../Scene/SceneMode',
         '../ThirdParty/when'
@@ -47,6 +48,7 @@ define([
         GeographicTilingScheme,
         QuadtreeTileLoadState,
         QuadtreeTileProvider,
+        RialtoPointCloudColorizer,
         RialtoPointCloudTile,
         SceneMode,
         when
@@ -59,12 +61,14 @@ define([
     // url (string): name of a table in a Rialto GeoPackage tile server
     //   example: "http://example.com/rialto/geopackagefile/tablename"
     //
-    // colorizeRamp (string): name of color scheme (see RialtoPointCloudColorizer)
+    // colorizerRamp (string): name of color scheme (see RialtoPointCloudColorizer)
     //   example: "Spectral"
+    //   if undefined, will just make the point white at position (x,y,z)
     //
-    // colorizeDimension (string): name of the dimension to displayed as the point cloud
+    // colorizerDimension (string): name of the dimension to displayed as the point cloud
     //   example: "Z"
-    var RialtoPointCloudProvider = function RialtoPointCloudProvider(url, colorizeRamp, colorizeDimension) {
+    //   if undefined, will just make the point white at position (x,y,z)
+    var RialtoPointCloudProvider = function RialtoPointCloudProvider(url, colorizerRampName, colorizerDimensionName) {
         this._url = url;
         this._quadtree = undefined;
         this._tilingScheme = new GeographicTilingScheme();
@@ -73,11 +77,15 @@ define([
 
         this._ready = false;
 
-        this.rampName = colorizeRamp;
-        this.colorizeDimension = colorizeDimension;
+        this.colorizer = new RialtoPointCloudColorizer();
+        this.colorizer.rampName = colorizerRampName;
+        this.colorizer.dimensionName = colorizerDimensionName;
+
         this.visibility = true;
 
         this.header = undefined;
+        
+        this.pointSize = undefined; // in bytes
     };
 
 
@@ -85,7 +93,6 @@ define([
         ready : {
             get : function () {
                 "use strict";
-                //console.log("ready check" + this._ready);
                 return this._ready;
             }
         },
@@ -125,7 +132,12 @@ define([
 
         loadJson(url).then(function (json) {
             that.header = json;
-            that.header.pointSizeInBytes = that._computePointSize();
+            
+            if (that.header.version != 4) {
+                throw new DeveloperError("Rialto Error: unsupported tile version");
+            }
+            
+            that.header.pointSize = that._computePointSize();
             that._ready = true;
 
             deferred.resolve(that);
@@ -141,8 +153,8 @@ define([
     RialtoPointCloudProvider.prototype.setColorization = function (rampName, dimensionName) {
         "use strict";
 
-        this.rampName = rampName;
-        this.colorizeDimension = dimensionName;
+        this.colorizer.rampName = rampName;
+        this.colorizer.dimensionName = dimensionName;
     };
 
 
@@ -153,39 +165,38 @@ define([
     };
 
 
+    var datatype_sizes = {
+        "uint8_t": 1,
+        "int8_t": 1,
+        "uint16_t": 2,
+        "int16_t": 2,
+        "uint32_t": 4,
+        "int32_t": 4,
+        "uint64_t": 8,
+        "int64_t": 8,
+        "float": 4,
+        "double": 8
+    };
+
+
     RialtoPointCloudProvider.prototype._computePointSize = function () {
         "use strict";
 
         var dims = this.header.dimensions;
-        var tot = 0;
+        var numBytes = 0;
         var i;
 
-        var sizes = {
-            "uint8_t": 1,
-            "int8_t": 1,
-            "uint16_t": 2,
-            "int16_t": 2,
-            "uint32_t": 4,
-            "int32_t": 4,
-            "uint64_t": 8,
-            "int64_t": 8,
-            "float": 4,
-            "double": 8
-        };
-
         for (i = 0; i < dims.length; i += 1) {
-            dims[i].offset = tot;
-            
-            if (sizes[dims[i].datatype] == undefined) {
+            dims[i].offset = numBytes;
+
+            if (datatype_sizes[dims[i].datatype] == undefined) {
                 throw new DeveloperError("Rialto Error: unknown datatype " + dims[i].datatype);
             }
             
-            tot += sizes[dims[i].datatype];
+            numBytes += datatype_sizes[dims[i].datatype];
         }
 
-        //console.log("Point size: " + tot);
-
-        return tot;
+        return numBytes;
     };
 
 
@@ -223,48 +234,45 @@ define([
             throw new DeveloperError("Rialto Error: bad load state 1");
         }
 
-        //console.log("parent of: " + tile.name + " is " + tile.parent.name);
         if (tile.parent.data == undefined || tile.parent.data.ppcc == undefined || !tile.parent.data.ppcc.ready) {
             // parent not available for us to ask it about its child,
             // and if the parent doesn't exist yet then the child must not either
             return false;
         }
 
-        var pX = tile.parent.x;
-        var pY = tile.parent.y;
-        var hasChild = tile.parent.data.ppcc.isChildAvailable(pX, pY, tile.x, tile.y);
-        if (hasChild) {
-            return true;
-        }
-        return false;
+        var hasChild = tile.parent.data.ppcc.isChildAvailable(tile.parent.x, tile.parent.y, tile.x, tile.y);
+        return hasChild;
     }
 
 
     RialtoPointCloudProvider.prototype._initTileData = function(tile, frameState) {
 
-        tile.data = {
-            primitive : undefined,
-            freeResources : function() {
-                if (defined(this.primitive) && this.primitive != null) {
-                    this.primitive.destroy();
-                    this.primitive = undefined;
-                    //console.log("free: " + tile.level + " " + tile.x + " " + tile.y);
+        var freeme = function() {
+            if (!defined(this.primitive) || this.primitive == null) {
+                return;
+            }
 
-                    if (tile.data != undefined && tile.data != null &&
-                        tile.data.ppcc != undefined && tile.data.ppcc != null &&
-                        tile.data.ppcc.dimensions != undefined && tile.data.ppcc.dimensions != null) {
-                        var header = tile.data.ppcc.header;
-                        if (header != undefined && header != null) {
-                            var headerDims = header.dimensions;
-                            for (var i = 0; i < headerDims.length; i += 1) {
-                                var name = headerDims[i].name;
-                                tile.data.ppcc.dimensions[name] = null;
-                            }
-                            tile.data.ppcc.dimensions = null;
-                        }
+            this.primitive.destroy();
+            this.primitive = undefined;
+
+            if (tile.data != undefined && tile.data != null &&
+                tile.data.ppcc != undefined && tile.data.ppcc != null &&
+                tile.data.ppcc.dimensions != undefined && tile.data.ppcc.dimensions != null) {
+                var header = tile.data.ppcc.header;
+                if (header != undefined && header != null) {
+                    var headerDims = header.dimensions;
+                    for (var i = 0; i < headerDims.length; i += 1) {
+                        var name = headerDims[i].name;
+                        tile.data.ppcc.dimensions[name] = null;
                     }
+                    tile.data.ppcc.dimensions = null;
                 }
             }
+        };
+            
+        tile.data = {
+            primitive: undefined,
+            freeResources: freeme
         };
 
         tile.data.boundingSphere3D = BoundingSphere.fromRectangle3D(tile.rectangle);
@@ -274,9 +282,8 @@ define([
 
 
     RialtoPointCloudProvider.prototype.loadTile = function(context, frameState, tile) {
-        //console.log("?: " + tile.level + " " + tile.x + " " + tile.y);
 
-        if (!(tile.state === QuadtreeTileLoadState.START || tile.state === QuadtreeTileLoadState.LOADING)) {
+        if (tile.state !== QuadtreeTileLoadState.START && tile.state !== QuadtreeTileLoadState.LOADING) {
             throw new DeveloperError("Rialto Error: bad load state 2");
         }
 
@@ -333,7 +340,7 @@ define([
 
 
     RialtoPointCloudProvider.prototype.showTileThisFrame = function(tile, context, frameState, commandList) {
-        //console.log("prim update: " + tile.name);
+
         if (tile.data.primitive != null) {
             tile.data.primitive.update(context, frameState, commandList);
         }

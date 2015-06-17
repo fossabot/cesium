@@ -29,8 +29,10 @@ define([
     "use strict";
 
     var RialtoPointCloudColorizer = function RialtoPointCloudColorizer() {
-        
+        this.rampName = undefined;
+        this.dimensionName = undefined;
     };
+
 
     // each ramp is a list of Stops
     // a Stop is a list with two elements, the stop point and a color-triplet
@@ -69,25 +71,63 @@ define([
     };
 
 
-    // returns a color triplet
-    var _interpolateColorRamp = function (z, startRange, endRange, startColor, endColor) {
+    var _interpolatePoint = function (zmin, zmax, rgbaArray, rgbaArrayIndex, z, stops) {
         'use strict';
 
-        var scale = (z - startRange) / (endRange - startRange);
-        if (scale < 0.0 || scale > 1.0) {
-            throw new DeveloperError("Rialto error: colorizer scale clamp");
+        var zLen = zmax - zmin;
+
+        // handle FP math
+        if (z < zmin) {
+            z = zmin;
+        } else if (z > zmax) {
+            z = zmax;
         }
+
+        var scaledZ = (zLen == 0.0) ? 0.0 : (z - zmin) / zLen;
+
+        // handle FP math issues
+        if (scaledZ < 0.0) {
+            scaledZ = 0.0;
+        } else if (scaledZ > 1.0) {
+            scaledZ = 1.0;
+        }
+
+        var startRange = stops[0][0];
+
+        // find the ramp segment that applies to this point
+        var endRange;
+        var s;
+        for (s = 1; s < stops.length; s += 1) {
+            endRange = stops[s][0];
+
+            if (scaledZ >= startRange && scaledZ <= endRange) {
+                break;
+            }
+
+            startRange = endRange;
+        }
+
+        var startColor = stops[s - 1][1];
+        var endColor = stops[s][1];
+        
+        var scale = (scaledZ - startRange) / (endRange - startRange);
+        //if (scale < 0.0 || scale > 1.0) {
+        //    throw new DeveloperError("Rialto error: colorizer scale clamp");
+        //}
 
         var r = scale * (endColor[0] - startColor[0]) + startColor[0];
         var g = scale * (endColor[1] - startColor[1]) + startColor[1];
         var b = scale * (endColor[2] - startColor[2]) + startColor[2];
-        if (!(r >= 0.0 && r <= 255.0) &&
-             (g >= 0.0 && g <= 255.0) &&
-             (b >= 0.0 && b <= 255.0)) {
-                 throw new DeveloperError("Rialto error: colorizer unclamped");
-        }
-
-        return [r, g, b];
+        //if (!(r >= 0.0 && r <= 255.0) &&
+        //     (g >= 0.0 && g <= 255.0) &&
+        //     (b >= 0.0 && b <= 255.0)) {
+        //         throw new DeveloperError("Rialto error: colorizer unclamped");
+        //}
+    
+        rgbaArray[rgbaArrayIndex * 4] = r;
+        rgbaArray[rgbaArrayIndex * 4 + 1] = g;
+        rgbaArray[rgbaArrayIndex * 4 + 2] = b;
+        rgbaArray[rgbaArrayIndex * 4 + 3] = 255;
     };
 
 
@@ -97,10 +137,10 @@ define([
     // dataArray is a typed array
     // zmin, zmax are doubles
     // rgbaArray is Uint8Array of r,g,b,a
-    RialtoPointCloudColorizer.prototype.run = function (rampName, dataArray, numPoints, zmin, zmax, rgbaArray) {
+    RialtoPointCloudColorizer.prototype.run = function (dataArray, numPoints, zmin, zmax, rgbaArray) {
         'use strict';
 
-        if (rampName == "native") {
+        if (this.rampName == "native") {
             throw new DeveloperError("Rialto error: notive colorramp disabled");
         }
         
@@ -126,75 +166,21 @@ define([
             return rgba;
         }*/
 
-        var stops = _colorRamps[rampName];
+        var stops = _colorRamps[this.rampName];
 
-        var zLen = zmax - zmin;
+        if (stops.length < 2) {
+            throw new DeveloperError("Rialto error: colorizer stops length");
+        }
+        if (stops[0][0] != 0.0) {
+            throw new DeveloperError("Rialto error: colorizer first stop");                
+        }
+        if (stops[stops.length - 1][0] != 1.0) {
+            throw new DeveloperError("Rialto error: colorizer last stop");
+        }
 
         var i;
-        var z;
-        var scaledZ;
-        var startRange, endRange;
-        var result;
-        var s;
-
         for (i = 0; i < numPoints; i += 1) {
-            z = dataArray[i];
-
-            // handle FP math
-            if (z < zmin) {
-                z = zmin;
-            } else if (z > zmax) {
-                z = zmax;
-            }
-
-            scaledZ = (zLen == 0.0) ? 0.0 : (z - zmin) / zLen;
-
-            // handle FP math
-            if (scaledZ < 0.0) {
-                scaledZ = 0.0;
-            }
-            if (scaledZ > 1.0) {
-                scaledZ = 1.0;
-            }
-
-            if (stops.length < 2) {
-                throw new DeveloperError("Rialto error: colorizer stops length");
-            }
-            if (stops[0][0] != 0.0) {
-                throw new DeveloperError("Rialto error: colorizer first stop");                
-            }
-            if (stops[stops.length - 1][0] != 1.0) {
-                throw new DeveloperError("Rialto error: colorizer last stop");
-            }
-
-            startRange = stops[0][0];
-
-            result = null; // TODO: don't make new object for each point
-
-            for (s = 1; s < stops.length; s += 1) {
-                endRange = stops[s][0];
-
-                if (scaledZ >= startRange && scaledZ <= endRange) {
-                    result = _interpolateColorRamp(scaledZ, startRange, endRange, stops[s - 1][1], stops[s][1]);
-                    break;
-                }
-
-                startRange = endRange;
-            }
-            if (result == null) {
-                throw new DeveloperError("Rialto error: colorizer result null");
-            }
-
-            if (!(result[0] >= 0 && result[0] <= 255) &&
-                 (result[1] >= 0 && result[1] <= 255) &&
-                 (result[2] >= 0 && result[2] <= 255)) {
-                     throw new DeveloperError("Rialto error: colorizer output clamps");
-            }
-            
-            rgbaArray[i * 4] = result[0];
-            rgbaArray[i * 4 + 1] = result[1];
-            rgbaArray[i * 4 + 2] = result[2];
-            rgbaArray[i * 4 + 3] = 255;
+            _interpolatePoint(zmin, zmax, rgbaArray, i, dataArray[i], stops);
         }
     };
 

@@ -51,21 +51,26 @@ define([
     // x: the col number of this tile
     // y: the row number of this tile
     var RialtoPointCloudTile = function RialtoPointCloudTile(provider, level, x, y) {
+
         this._provider = provider;
         this._x = x;
         this._y = y;
         this._level = level;
 
+        this._numPoints = undefined;
+        
         this._primitive = undefined;
-        this.url = this._provider._url + "/" + level + "/" + x + "/" + y;
-        this._name = "[" + level + "/" + x + "/" + y + "]";
-        this.dimensions = undefined; // list of arrays of dimension data
+        
+        this._name = level + "/" + x + "/" + y;
+        this._url = this._provider._url + "/" + this._name;
+        
+        this.dimensions = undefined; // map from dimension name to data array
 
+        // the child tiles
         this.swExists = false;
         this.seExists = false;
         this.nwExists = false;
         this.neExists = false;
-        this._childTileMask = undefined;
 
         this._ready = false;
     }
@@ -75,14 +80,12 @@ define([
         ready : {
             get : function () {
                 "use strict";
-                //console.log("ready check" + this._ready);
                 return this._ready;
             }
         },
         primitive : {
             get : function () {
                 "use strict";
-                //console.log("ready check" + this._ready);
                 return this._primitive;
             }
         },
@@ -115,6 +118,12 @@ define([
                 "use strict";
                 return this._provider.header;
             }
+        },
+        numPoints : {
+            get : function () {
+                "use strict";
+                return this._numPoints;
+            }
         }
     });
 
@@ -125,13 +134,10 @@ define([
     RialtoPointCloudTile.prototype.load = function() {
        "use strict";
 
-        //console.log("loading tile: " + this.url);
-
         var that = this;
 
         // get the blob from the server
-        loadBlob(this.url).then(function (blob) {
-            //console.log("got blob for " + that.name + ", size=" + blob.size);
+        loadBlob(this._url).then(function (blob) {
 
             if (blob.size == 0) {
                 throw new DeveloperError("Rialto Error: returned blob for tile has length zero");
@@ -147,15 +153,14 @@ define([
             reader.addEventListener("loadend", function () {
                 var buffer = reader.result;
                 that._loadFromBuffer(buffer);
-                that.colorize();
-                that._primitive = that.createPrimitive(that.numPoints, that.dimensions);
+                that._colorize();
+                that._primitive = that._createPrimitive();
                 that._ready = true;
-                //console.log("ready: " + that.name);
             });
             reader.readAsArrayBuffer(blob);
 
         }).otherwise(function () {
-            throw new DeveloperError("Rialto Error: failed to read point cloud tile: " + this.url);
+            throw new DeveloperError("Rialto Error: failed to read point cloud tile: " + this._url);
         });
     }
 
@@ -163,29 +168,26 @@ define([
     RialtoPointCloudTile.prototype._loadFromBuffer = function (buffer) {
         "use strict";
 
-        var level = this.level;
-        var x = this.x;
-        var y = this.y;
-
         if (buffer == null) {
             throw new DeveloperError("Rialto Error: buffer null: " + name);
         }
 
+        var level = this.level;
+        var x = this.x;
+        var y = this.y;
+
         // The server's returned blob:
         //   first 4 bytes is number of points
-        //   next 4 bytes is mask
+        //   next 4 bytes is children mask
         //   remaining bytes are the points, in xyzxyzxyz order
 
-        var uints = new Uint32Array(buffer, 0, 2);
-        var numUints = uints.length;
+        var two_uints = new Uint32Array(buffer, 0, 2);
 
-        var numPoints = uints[0];
-        var mask = uints[1];
-        this._setChildren(mask);
+        this._numPoints = two_uints[0];
+        this._setChildren(two_uints[1]);
 
         var bytes = new Uint8Array(buffer, 8);
         var numBytes = bytes.length;
-        //console.log("num bytes in point data=" + numBytes);
 
         if (numBytes > 0) {
             // make our local copy of the points
@@ -207,56 +209,50 @@ define([
         var i;
         var datatype,
             offset,
-            stride,
             name,
             v;
 
-        var pointSize = this._provider.header.pointSizeInBytes;
+        var pointSize = this._provider.header.pointSize;
 
-        if (numBytes == 0) {
-            this.numPoints = 0;
-        } else {
-            this.numPoints = numBytes / pointSize;
-            if (this.numPoints * pointSize != numBytes) {
-                throw new DeveloperError("Rialto Error: wrong num points");
-            }
+        if (this.numPoints * pointSize != numBytes) {
+            throw new DeveloperError("Rialto Error: wrong num points");
         }
 
         this.dimensions = {};
-
-        //console.log("num points in tile: " + this.numPoints);
-
+        
         for (i = 0; i < headerDims.length; i += 1) {
             datatype = headerDims[i].datatype;
             offset = headerDims[i].offset;
             name = headerDims[i].name;
-            stride = pointSize;
 
             if (this.numPoints == 0) {
                 v = null;
             } else {
-                v = this._extractDimensionArray(dataview, datatype, offset, stride, this.numPoints);
+                v = this._extractDimensionArray(dataview, datatype, offset, pointSize, this.numPoints);
             }
             this.dimensions[name] = v;
         }
 
-       // this is the array used to colorize each point
+        // this is the "special dimension", the array used to hold the color of each point
+        // we default to white, unless and until colorize() changes it
         var rgba = new Uint8Array(this.numPoints * 4);
         for (i = 0; i < this.numPoints * 4; i += 1) {
             rgba[i] = 255;
         }
-        name = "rgba";
-        this.dimensions[name] = rgba;
+        this.dimensions["rgba"] = rgba;
     };
 
 
-    // Dataview is an array-of-structs: x0, y0, z0, t0, x1, y1, ...
-    // Create an array of all the elements from one of the struct fields, e.g. Y
+    // Dataview is an array-of-structs: [x0, y0, z0, t0, x1, y1, ...]
+    // Create an array of all the elements from one of the struct fields, e.g. [y0, y1, ...]
     RialtoPointCloudTile.prototype._extractDimensionArray = function (dataview, datatype, offset, stride, len) {
         "use strict";
 
         var dst, dstIndex, dvIndex;
 
+        // note we keep the datatype test outside the loop, to potentially
+        // help performance
+        
         switch (datatype) {
         case "uint8_t":
             dst = new Uint8Array(len);
@@ -327,25 +323,10 @@ define([
 
 
     RialtoPointCloudTile.prototype._setChildren = function (mask) {
-
-        this._childTileMask = mask;
-
-        if ((mask & 1) == 1) {
-            // (level + 1, 2 * x, 2 * y + 1);
-            this.swExists = true;
-        }
-        if ((mask & 2) == 2) {
-            // (level + 1, 2 * x + 1, 2 * y + 1);
-            this.seExists = true;
-        }
-        if ((mask & 4) == 4) {
-            // (level + 1, 2 * x + 1, 2 * y);
-            this.neExists = true;
-        }
-        if ((mask & 8) == 8) {
-            // (level + 1, 2 * x, 2 * y);
-            this.nwExists = true;
-        }
+        this.swExists = ((mask & 1) == 1);
+        this.seExists = ((mask & 2) == 2);
+        this.neExists = ((mask & 4) == 4);
+        this.nwExists = ((mask & 8) == 8);
     }
 
 
@@ -353,23 +334,19 @@ define([
     // of cartesian triples.
     //
     // (taken from Cartesian3.fromDegreesArrayHeights)
-    RialtoPointCloudTile.prototype.Cartesian3_fromDegreesArrayHeights_merge = function (x, y, z, cnt, ellipsoid) {
+    var _Cartesian3_fromDegreesArrayHeights_merge = function (x, y, z, cnt, ellipsoid) {
         "use strict";
-
-        if (cnt != this.numPoints) {
-            throw new DeveloperError("Rialto Error: wrong num points");
-        }
 
         var xyz = new Float64Array(cnt * 3);
 
         var i;
-        var lon, lat, alt, result;
+        var lon, lat, result;
+        
         for (i = 0; i < cnt; i++) {
             lon = Math.toRadians(x[i]);
             lat = Math.toRadians(y[i]);
-            alt = z[i];
 
-            result = Cartesian3.fromRadians(lon, lat, alt, ellipsoid);
+            result = Cartesian3.fromRadians(lon, lat, z[i], ellipsoid);
 
             xyz[i*3] = result.x;
             xyz[i*3+1] = result.y;
@@ -382,9 +359,12 @@ define([
 
     // x,y,z are presumed to be F64 arrays
     // rgba is presumed to an U8 array
-    RialtoPointCloudTile.prototype.createPrimitive = function (cnt, dims) {
+    RialtoPointCloudTile.prototype._createPrimitive = function () {
         "use strict";
 
+        var cnt = this.numPoints;
+        var dims = this.dimensions;
+        
         if (cnt == 0) {
             return null;
         }
@@ -394,11 +374,8 @@ define([
         var z = dims["Z"];
         var rgba = dims["rgba"];
 
-        var xyz = this.Cartesian3_fromDegreesArrayHeights_merge(x, y, z, cnt);
+        var xyz = _Cartesian3_fromDegreesArrayHeights_merge(x, y, z, cnt);
 
-        if (this.numPoints != cnt) {
-            throw new DeveloperError("Rialto Error: bad point count / createPrimitive");
-        }
         if (xyz.length != cnt * 3) {
             throw new DeveloperError("Rialto Error: bad xyz point count / createPrimitive");
         }
@@ -411,7 +388,7 @@ define([
                 positionsTypedArray: xyz,
                 colorsTypedArray: rgba
             }),
-            id : 'point'
+            id : this.name
         });
 
         var prim = new Primitive({
@@ -427,25 +404,28 @@ define([
     // from the header
     //
     // The special "rgba" dimension is what we're going to display.
-    RialtoPointCloudTile.prototype.colorize = function () {
-
+    RialtoPointCloudTile.prototype._colorize = function () {
+        
+        if (this._provider.colorizer.rampName == undefined ||
+            this._provider.colorizer.dimensionName == undefined) {
+            // skip the colorization, leave as white
+            return;
+        }
+        
         var headerDims = this._provider.header.dimensions;
         var min, max;
         for (var i=0; i<headerDims.length; i++) {
-            if (headerDims[i].name == this._provider.colorizeDimension) {
-                min = headerDims[i].min;
-                max = headerDims[i].max;
+            if (headerDims[i].name == this._provider.colorizer.dimensionName) {
+                min = headerDims[i].minimum;
+                max = headerDims[i].maximum;
                 break;
             }
         }
 
-        var nam = this._provider.colorizeDimension;
-        var dataArray = this.dimensions[nam];
-        var rgba = "rgba";
-        var rgbaArray = this.dimensions[rgba];
+        var dataArray = this.dimensions[this._provider.colorizer.dimensionName];
+        var rgbaArray = this.dimensions["rgba"];
 
-        var colorizer = new RialtoPointCloudColorizer();
-        colorizer.run(this._provider.rampName, dataArray, this.numPoints, min, max, rgbaArray);
+        this._provider.colorizer.run(dataArray, this.numPoints, min, max, rgbaArray);
     }
 
 
