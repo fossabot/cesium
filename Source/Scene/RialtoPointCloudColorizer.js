@@ -155,16 +155,13 @@ define([
                 //throw new Error("Native colorization not supported for point clouds without RGB data");
                 return null;
             }
-            var rlist = rpct.dimensions["Red"];
-            var glist = rpct.dimensions["Green"];
-            var blist = rpct.dimensions["Blue"];
             //console.log(rpct.dimensions);
 
                   var i;
             for ( i = 0; i < numPoints; i++) {
-                rgbaArray[i * 4 + 0] = uint16touint8(rlist[i]);
-                rgbaArray[i * 4 + 1] = uint16touint8(glist[i]);
-                rgbaArray[i * 4 + 2] = uint16touint8(blist[i]);
+                rgbaArray[i * 4 + 0] = uint16touint8(rpct.dimensions["Red"][i]);
+                rgbaArray[i * 4 + 1] = uint16touint8(rpct.dimensions["Green"][i]);
+                rgbaArray[i * 4 + 2] = uint16touint8(rpct.dimensions["Blue"][i]);
                 rgbaArray[i * 4 + 3] = 255;
             }
 
