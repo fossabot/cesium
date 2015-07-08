@@ -130,6 +130,10 @@ define([
         rgbaArray[rgbaArrayIndex * 4 + 3] = 255;
     };
 
+    var uint16touint8 = function(uint16){
+        return   (uint16 * 255)/65535;
+    }
+
 
     // Given an array of values, create an RGB array with the right scalings.
     //
@@ -137,34 +141,35 @@ define([
     // dataArray is a typed array
     // zmin, zmax are doubles
     // rgbaArray is Uint8Array of r,g,b,a
-    RialtoPointCloudColorizer.prototype.run = function (dataArray, numPoints, zmin, zmax, rgbaArray) {
+    RialtoPointCloudColorizer.prototype.run = function (dataArray, numPoints, zmin, zmax, rgbaArray, rpct) {
         'use strict';
 
+        //console.log(rgbaArray);
+
+        //console.log(rpct);
+        //console.log(rpct.dimensions);
+        //console.log(rpct.dimensions["Red"]);
+
         if (this.rampName == "native") {
-            throw new DeveloperError("Rialto error: notive colorramp disabled");
-        }
-        
-        /*if (ramp == "native") {
-            mylog(tile.data.keys);
-            if (!tile.data.containsKey("Red") || !tile.data.containsKey("Green") || !tile.data.containsKey("Blue")) {
-                Hub.error("Native colorization not supported for point clouds without RGB data");
+            if (!rpct.dimensions["Red"] || !rpct.dimensions["Blue"] || !rpct.dimensions["Green"] ) {
+                //throw new Error("Native colorization not supported for point clouds without RGB data");
                 return null;
             }
-            var rlist = tile.data["Red"];
-            var glist = tile.data["Green"];
-            var blist = tile.data["Blue"];
-            myassert(rlist is Uint8List);
-            myassert(glist is Uint8List);
-            myassert(blist is Uint8List);
+            var rlist = rpct.dimensions["Red"];
+            var glist = rpct.dimensions["Green"];
+            var blist = rpct.dimensions["Blue"];
+            //console.log(rpct.dimensions);
 
-            for (int i = 0; i < tile.numPointsInTile; i++) {
-                rgba[i * 4 + 0] = rlist[i];
-                rgba[i * 4 + 1] = glist[i];
-                rgba[i * 4 + 2] = blist[i];
-                rgba[i * 4 + 3] = 255;
+                  var i;
+            for ( i = 0; i < numPoints; i++) {
+                rgbaArray[i * 4 + 0] = uint16touint8(rlist[i]);
+                rgbaArray[i * 4 + 1] = uint16touint8(glist[i]);
+                rgbaArray[i * 4 + 2] = uint16touint8(blist[i]);
+                rgbaArray[i * 4 + 3] = 255;
             }
-            return rgba;
-        }*/
+
+            return rgbaArray;
+        }
 
         var stops = _colorRamps[this.rampName];
 
