@@ -424,8 +424,7 @@ define([
 
         var dataArray = this.dimensions[this._provider.colorizer.dimensionName];
         var rgbaArray = this.dimensions["rgba"];
-
-        this._provider.colorizer.run(dataArray, this.numPoints, min, max, rgbaArray);
+        this._provider.colorizer.run(dataArray, this.numPoints, min, max, rgbaArray, this);
     }
 
 
