@@ -5,6 +5,7 @@
 define([
         '../Cesium',
         '../Core/defined',
+        '../Core/destroyObject',
         '../Core/BoundingSphere',
         '../Core/Cartesian3',
         '../Core/ColorGeometryInstanceAttribute',
@@ -21,6 +22,7 @@ define([
     ], function(
         Cesium,
         defined,
+        destroyObject,
         BoundingSphere,
         Cartesian3,
         ColorGeometryInstanceAttribute,
