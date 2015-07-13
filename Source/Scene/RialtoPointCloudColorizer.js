@@ -31,6 +31,7 @@ define([
     var RialtoPointCloudColorizer = function RialtoPointCloudColorizer() {
         this.rampName = undefined;
         this.dimensionName = undefined;
+        this.rampNames = _colorRamps;
     };
 
 
