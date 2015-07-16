@@ -131,7 +131,7 @@ define([
     // Loads the points from the database/server for this tile.
     //
     // Sets this.ready when done
-    RialtoPointCloudTile.prototype.load = function() {
+    RialtoPointCloudTile.prototype.load = function(visible) {
        "use strict";
 
         var that = this;
@@ -155,6 +155,9 @@ define([
                 that._loadFromBuffer(buffer);
                 that._colorize();
                 that._primitive = that._createPrimitive();
+                if (that._primitive != null) {
+                    that._primitive.show = visible;
+                }
                 that._ready = true;
             });
             reader.readAsArrayBuffer(blob);
