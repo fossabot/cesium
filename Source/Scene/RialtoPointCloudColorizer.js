@@ -23,8 +23,10 @@ THE SOFTWARE.
 /*global define*/
 define([
         '../Cesium',
+        '../Core/DeveloperError',
     ], function(
-        Cesium
+        Cesium,
+        DeveloperError
     ) {
     "use strict";
 
@@ -41,7 +43,6 @@ define([
     // These were taken directly from somewhere on the web -- I think the QGIS
     // sources, but I'm not positive.
     var _colorRamps = {
-        //"native": [],
         "Blues": [[0.00, [247, 251, 255]], [0.13, [222, 235, 247]], [0.26, [198, 219, 239]], [0.39, [158, 202, 225]], [0.52, [107, 174, 214]], [0.65, [66, 146, 198]], [0.78, [33, 113, 181]], [0.90, [8, 81, 156]], [1.00, [8, 48, 107]]],
         "Brown-Blue-Green": [[0.00, [166, 97, 26]], [0.25, [223, 194, 125]], [0.5, [245, 245, 245]], [0.75, [128, 205, 193]], [1.00, [1, 133, 113]]],
         "Blue-Green": [[0.00, [237, 248, 251]], [0.25, [178, 226, 226]], [0.50, [102, 194, 164]], [0.75, [44, 162, 95]], [1.00, [0, 109, 44]]],
@@ -145,21 +146,25 @@ define([
     RialtoPointCloudColorizer.prototype.run = function (dataArray, numPoints, zmin, zmax, rgbaArray, rpct) {
         'use strict';
 
-        //console.log(rgbaArray);
-
-        //console.log(rpct);
-        //console.log(rpct.dimensions);
-        //console.log(rpct.dimensions["Red"]);
-
-        if (this.rampName == "native") {
-            if (!rpct.dimensions["Red"] || !rpct.dimensions["Blue"] || !rpct.dimensions["Green"] ) {
-                //throw new Error("Native colorization not supported for point clouds without RGB data");
-                return null;
+        if (this.rampName == "none") {  // all points are white
+            var i;
+            for (i = 0; i < numPoints; i++) {
+                rgbaArray[i * 4 + 0] = 255;
+                rgbaArray[i * 4 + 1] = 255;
+                rgbaArray[i * 4 + 2] = 255;
+                rgbaArray[i * 4 + 3] = 255;
             }
-            //console.log(rpct.dimensions);
 
-                  var i;
-            for ( i = 0; i < numPoints; i++) {
+            return rgbaArray;
+        }
+
+        if (this.rampName == "native") { // use the R,G,B dimensions
+            if (!rpct.dimensions["Red"] || !rpct.dimensions["Blue"] || !rpct.dimensions["Green"] ) {
+                throw new DeveloperError("Rialto error: 'native' colorization requires point clouds with RGB dimensions");
+            }
+
+            var i;
+            for (i = 0; i < numPoints; i++) {
                 rgbaArray[i * 4 + 0] = uint16touint8(rpct.dimensions["Red"][i]);
                 rgbaArray[i * 4 + 1] = uint16touint8(rpct.dimensions["Green"][i]);
                 rgbaArray[i * 4 + 2] = uint16touint8(rpct.dimensions["Blue"][i]);

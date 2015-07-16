@@ -405,6 +405,9 @@ define([
     //
     // The special "rgba" dimension is what we're going to display.
     RialtoPointCloudTile.prototype._colorize = function () {
+        if (this.numPoints == 0) {
+            return;
+        }
         
         if (this._provider.colorizer.rampName == undefined ||
             this._provider.colorizer.dimensionName == undefined) {
