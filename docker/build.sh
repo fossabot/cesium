@@ -12,6 +12,7 @@ yum -y install \
     gcc-c++ \
     nginx \
     nodejs \
+    npm \
     tar \
     unzip
 
