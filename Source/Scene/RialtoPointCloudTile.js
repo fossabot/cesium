@@ -131,7 +131,7 @@ define([
     // Loads the points from the database/server for this tile.
     //
     // Sets this.ready when done
-    RialtoPointCloudTile.prototype.load = function() {
+    RialtoPointCloudTile.prototype.load = function(visible) {
        "use strict";
 
         var that = this;
@@ -155,6 +155,9 @@ define([
                 that._loadFromBuffer(buffer);
                 that._colorize();
                 that._primitive = that._createPrimitive();
+                if (that._primitive != null) {
+                    that._primitive.show = visible;
+                }
                 that._ready = true;
             });
             reader.readAsArrayBuffer(blob);
@@ -405,6 +408,9 @@ define([
     //
     // The special "rgba" dimension is what we're going to display.
     RialtoPointCloudTile.prototype._colorize = function () {
+        if (this.numPoints == 0) {
+            return;
+        }
         
         if (this._provider.colorizer.rampName == undefined ||
             this._provider.colorizer.dimensionName == undefined) {

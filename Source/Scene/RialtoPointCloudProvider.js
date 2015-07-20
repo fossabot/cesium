@@ -70,7 +70,7 @@ define([
     // colorizerDimension (string): name of the dimension to displayed as the point cloud
     //   example: "Z"
     //   if undefined, will just make the point white at position (x,y,z)
-    var RialtoPointCloudProvider = function RialtoPointCloudProvider(url, colorizerRampName, colorizerDimensionName) {
+    var RialtoPointCloudProvider = function RialtoPointCloudProvider(url, colorizerRampName, colorizerDimensionName, visible) {
         this._url = url;
         this._quadtree = undefined;
         this._tilingScheme = new GeographicTilingScheme();
@@ -83,11 +83,11 @@ define([
         this.colorizer.rampName = colorizerRampName;
         this.colorizer.dimensionName = colorizerDimensionName;
 
-        this.visibility = true;
-
         this.header = undefined;
         
         this.pointSize = undefined; // in bytes
+        
+        this.visible = visible;
     };
 
 
@@ -157,13 +157,6 @@ define([
 
         this.colorizer.rampName = rampName;
         this.colorizer.dimensionName = dimensionName;
-    };
-
-
-    RialtoPointCloudProvider.prototype.setVisibility = function (v) {
-        "use strict";
-
-        this.visibility = v;
     };
 
 
@@ -303,7 +296,7 @@ define([
             this._initTileData(tile, frameState);
 
             tile.data.ppcc = new RialtoPointCloudTile(this, tile.level, tile.x, tile.y);
-            tile.data.ppcc.load();
+            tile.data.ppcc.load(this.visible);
 
             tile.state = QuadtreeTileLoadState.LOADING;
         }
