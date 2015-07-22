@@ -2,6 +2,8 @@
 
 set -e
 
+BRANCH=dev_rialto
+
 #
 # base libs
 #
