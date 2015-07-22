@@ -33,13 +33,7 @@ unzip -o -d /tmp /tmp/cesium.zip
 mv /tmp/rialto-cesium-$BRANCH /tmp/cesium
 /tmp/apache-ant-1.9.5/bin/ant release -buildfile /tmp/cesium
 mkdir -p /opt/cesium-build
-cp -r /tmp/cesium/Build/* /opt/cesium-build/
-
-#
-# deploy
-#
-mkdir -p /opt/www
-cp -r /tmp/cesium/* /opt/www/
+cp -r /tmp/cesium/* /opt/cesium-build/
 
 #
 # cleanup
