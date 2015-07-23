@@ -36,6 +36,7 @@ cp -r /tmp/cesium/* /opt/cesium-build/
 #
 # cleanup
 #
+yum clean all
 rm -rf \
     /tmp/apache-ant-1.9.5 \
     /tmp/cesium/ \
