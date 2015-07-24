@@ -5,8 +5,7 @@ set -e
 #
 # base libs
 #
-yum -y install \
-    nodejs 
+yum -y install nodejs npm
 
 #
 # Ant
