@@ -5,16 +5,8 @@ set -e
 #
 # base libs
 #
-yum -y install http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-yum -y update
 yum -y install \
-    java-1.6.0-openjdk-devel \
-    gcc-c++ \
-    nginx \
-    nodejs \
-    npm \
-    tar \
-    unzip
+    nodejs 
 
 #
 # Ant
