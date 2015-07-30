@@ -535,8 +535,6 @@ define([
         }
         //>>includeEnd('debug');
         var url = buildImageUrl(this, x, y, level);
-        console.log("requesting level=" + "  y=" + y + "  x=" + x);
-        console.log(url);
         return ImageryProvider.loadImage(this, url);
     };
 
