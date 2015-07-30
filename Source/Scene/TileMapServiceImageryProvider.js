@@ -116,6 +116,11 @@ define([
         }
         this._credit = credit;
 
+        this._gdal2tiles = false;
+        if (defined(options.gdal2tiles)) {
+            this._gdal2tiles = options.gdal2tiles;
+        }
+
         var that = this;
         var metadataError;
 
@@ -165,7 +170,8 @@ define([
 
             var flipXY = false;
             if (tilingSchemeName === 'geodetic' || tilingSchemeName === 'mercator') {
-                flipXY = true;
+                //flipXY = true;
+                if (!that._gdal2tiles) { flipXY = true; }
             }
 
             if (!defined(that._tilingScheme)) {
@@ -528,8 +534,9 @@ define([
             throw new DeveloperError('requestImage must not be called before the imagery provider is ready.');
         }
         //>>includeEnd('debug');
-
         var url = buildImageUrl(this, x, y, level);
+        console.log("requesting level=" + "  y=" + y + "  x=" + x);
+        console.log(url);
         return ImageryProvider.loadImage(this, url);
     };
 
