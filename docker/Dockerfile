@@ -1,15 +1,11 @@
-FROM centos:centos7
+# rialto-cesium
+
+FROM radiantbluetechnologies/rialtobase-java
 MAINTAINER mpg@flaxen.com
 
-EXPOSE 8080
-
-ENV \
-    JAVA_HOME=/usr/lib/jvm/jre-1.6.0-openjdk.x86_64/ \
-    BRANCH=master_rialto
+ENV RIALTO_BRANCH=dev
 
 COPY build.sh /tmp/
 RUN /tmp/build.sh
 
-COPY nginx.conf /etc/nginx/
-
-CMD nginx
+CMD /bin/bash
