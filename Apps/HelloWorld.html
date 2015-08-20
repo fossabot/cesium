@@ -19,7 +19,13 @@
 <body>
   <div id="cesiumContainer"></div>
   <script>
-    var viewer = new Cesium.Viewer('cesiumContainer');
+    var viewer = new Cesium.Viewer('cesiumContainer',
+                                    {
+                                        scene3DOnly: true
+                                    });
+    var tileset = viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
+        url : '../serp.t3d'
+    }));
   </script>
 </body>
 </html>
