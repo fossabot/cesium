@@ -151,6 +151,8 @@ define([
             that._geometricError = tree.geometricError;
             that._root = new Cesium3DTile(that, baseUrl, tree.root, undefined);
 
+            console.log("Cesium3DTileset - loaded json for root");
+            
             var stack = [];
             stack.push({
                 header : tree.root,
@@ -165,6 +167,7 @@ define([
                     var length = children.length;
                     for (var k = 0; k < length; ++k) {
                         var childHeader = children[k];
+                        console.log("Cesium3DTileset - parsing out: " + childHeader.content.url);
                         var childTile = new Cesium3DTile(that, baseUrl, childHeader, t.cesium3DTile);
                         t.cesium3DTile.children.push(childTile);
 
@@ -176,8 +179,10 @@ define([
                 }
             }
 
+            console.log("Cesium3DTileset - load json done");
             that._readyPromise.resolve(that);
         }).otherwise(function(error) {
+            console.log("Cesium3DTileset - load json failed");
             that._readyPromise.reject(error);
         });
     };
@@ -294,6 +299,7 @@ define([
     ///////////////////////////////////////////////////////////////////////////
 
     function requestContent(tiles3D, tile) {
+        console.log("Cesium3DTileset.requestContent: " + tile._header.content.url);
         if (!requestScheduler.hasAvailableRequests()) {
             return;
         }
@@ -337,15 +343,19 @@ define([
 
         if (getScreenSpaceError(tiles3D._geometricError, root, context, frameState) <= maximumScreenSpaceError) {
             // The SSE of not rendering the tree is small enough that the tree does not need to be rendered
-            return;
+            
+            ///////////////////////////console.log("Cesium3DTiles.selectTiles - skipping SSE check");
+            ////////////// return;
         }
 
         if (root.isContentUnloaded()) {
+            console.log("Cesium3DTileset.selectTiles - for root");
             if (outOfCore) {
                 requestContent(tiles3D, root);
             }
             return;
         }
+        console.log("Cesium3DTileset.selectTiles - after root");
 
         var stats = tiles3D._statistics;
 

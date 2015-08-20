@@ -65,6 +65,8 @@ define([
             minimumHeight : b[4],
             maximumHeight : b[5]
         });
+        console.log("Cesium3DTile - " + rectangle.west + " " + rectangle.west + " " + rectangle.east + " " + rectangle.north);
+        
         this._orientedBoundingBox = OrientedBoundingBox.fromRectangle(rectangle, b[4], b[5]);
 // TODO: if the content type has pixel size, like points or billboards, the bounding volume needs
 // to dynamic size bigger like BillboardCollection and PointCollection
@@ -144,9 +146,12 @@ define([
         this._content = content;
 
         var that = this;
-
+        
+        console.log("Cesium3DTile - about to test for ready: " + contentHeader.url);
+        
         // Content enters the READY state
         when(content.readyPromise).then(function(content) {
+            console.log("Cesium3DTile - ready!");
             if (defined(that.parent)) {
                 --that.parent.numberOfChildrenWithoutContent;
             }

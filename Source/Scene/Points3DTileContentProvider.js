@@ -32,7 +32,9 @@ define([
     /**
      * @private
      */
-    var PointsDTileContentProvider = function(tileset, url, contentHeader) {
+    var Points3DTileContentProvider = function(tileset, url, contentHeader) {
+        console.log("Points3DTileContentProvider - " + url);
+
         this._primitive = undefined;
         this._url = url;
 
@@ -51,15 +53,25 @@ define([
          */
         this.readyPromise = when.defer();
 
-        this.boundingSphere = contentHeader.boundingSphere;
-
+        if (contentHeader.box) {
+            console.log("Points3DTileContentProvider - box: " + contentHeader.box);
+            var box = contentHeader.box;
+            var rect = new Cesium.Rectangle(box[0], box[1], box[2], box[3]);
+            console.log("Points3DTileContentProvider - rect: " + rect.west + " " + rect.south + " " + rect.east + " " + rect.north);
+            this.boundingSphere = Cesium.BoundingSphere.fromRectangle2D(rect);
+            console.log("Points3DTileContentProvider - sphere: " + this.boundingSphere.center + " " + this.boundingSphere.radius);            
+        } else {
+            this.boundingSphere = contentHeader.boundingSphere;
+        }
+            
         this._debugColor = Color.fromRandom({ alpha : 1.0 });
         this._debugColorizeTiles = false;
     };
 
     var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
 
-    PointsDTileContentProvider.prototype.request = function() {
+    Points3DTileContentProvider.prototype.request = function() {
+        console.log("Points3DTileContentProvider.request - " + this._url);
         var that = this;
 
         this.state = Cesium3DTileContentState.LOADING;
@@ -91,11 +103,27 @@ define([
             var numberOfPoints = view.getUint32(byteOffset, true);
             byteOffset += sizeOfUint32;
 
+            console.log("Points3DTileContentProvider.loadArrayBuffer - numPoints=" + numberOfPoints);
+
             var positionsOffsetInBytes = byteOffset;
             var positions = new Float32Array(arrayBuffer, positionsOffsetInBytes, numberOfPoints * 3);
 
+            console.log("positions (lonlath): " + positions[0] + " " + positions[1] + " " + positions[2]);
+            console.log("positions (lonlath): " + positions[(numberOfPoints-1)*3] + " " + positions[(numberOfPoints-1)*3+1] + " " + positions[(numberOfPoints-1)*3+2]);
+            
+            for (var i =0 ; i < numberOfPoints * 3; i+=3) {
+                var cartesian = Cesium.Cartesian3.fromDegrees(positions[i], positions[i+1], positions[i+2]);
+                positions[i] = cartesian.x;
+                positions[i+1] = cartesian.y;
+                positions[i+2] = cartesian.z;
+            }
+            console.log("positions (xyz): " + positions[0] + " " + positions[1] + " " + positions[2]);
+            console.log("positions (xyz): " + positions[(numberOfPoints-1)*3] + " " + positions[(numberOfPoints-1)*3+1] + " " + positions[(numberOfPoints-1)*3+2]);
+
             var colorsOffsetInBytes = positionsOffsetInBytes + (numberOfPoints * (3 * Float32Array.BYTES_PER_ELEMENT));
             var colors = new Uint8Array(arrayBuffer, colorsOffsetInBytes, numberOfPoints * 3);
+
+            console.log("sphere: " + that.boundingSphere.center.x + " " + that.boundingSphere.center.y + " " + that.boundingSphere.center.z + " " + that.boundingSphere.radius);
 
             // TODO: use custom load pipeline, e.g., RTC, scene3DOnly?
             // TODO: performance test with 'interleave : true'
@@ -134,9 +162,11 @@ define([
             content._debugColorizeTiles = false;
             content._primitive.appearance.uniforms.highlightColor = Color.WHITE;
         }
+        content._debugColorizeTiles = true;
+        content._primitive.appearance.uniforms.highlightColor = Color.WHITE;
     }
 
-    PointsDTileContentProvider.prototype.update = function(owner, context, frameState, commandList) {
+    Points3DTileContentProvider.prototype.update = function(owner, context, frameState, commandList) {
         // In the PROCESSING state we may be calling update() to move forward
         // the content's resource loading.  In the READY state, it will
         // actually generate commands.
@@ -146,15 +176,15 @@ define([
         this._primitive.update(context, frameState, commandList);
     };
 
-    PointsDTileContentProvider.prototype.isDestroyed = function() {
+    Points3DTileContentProvider.prototype.isDestroyed = function() {
         return false;
     };
 
-    PointsDTileContentProvider.prototype.destroy = function() {
+    Points3DTileContentProvider.prototype.destroy = function() {
         this._primitive = this._primitive && this._primitive.destroy();
 
         return destroyObject(this);
     };
 
-    return PointsDTileContentProvider;
+    return Points3DTileContentProvider;
 });
