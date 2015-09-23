@@ -33,6 +33,7 @@ define([
      * @private
      */
     var Points3DTileContentProvider = function(tileset, url, contentHeader) {
+
         console.log("Points3DTileContentProvider - " + url);
 
         this._primitive = undefined;
@@ -71,6 +72,7 @@ define([
     var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
 
     Points3DTileContentProvider.prototype.request = function() {
+
         console.log("Points3DTileContentProvider.request - " + this._url);
         var that = this;
 
