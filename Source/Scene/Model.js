@@ -12,6 +12,7 @@ define([
         '../Core/destroyObject',
         '../Core/DeveloperError',
         '../Core/Event',
+        '../Core/FeatureDetection',
         '../Core/getStringFromTypedArray',
         '../Core/IndexDatatype',
         '../Core/loadArrayBuffer',
@@ -26,11 +27,18 @@ define([
         '../Core/Quaternion',
         '../Core/Queue',
         '../Core/RuntimeError',
+        '../Renderer/Buffer',
         '../Renderer/BufferUsage',
         '../Renderer/DrawCommand',
+        '../Renderer/RenderState',
+        '../Renderer/Sampler',
+        '../Renderer/ShaderProgram',
         '../Renderer/ShaderSource',
+        '../Renderer/Texture',
         '../Renderer/TextureMinificationFilter',
         '../Renderer/TextureWrap',
+        '../Renderer/VertexArray',
+        '../Renderer/WebGLConstants',
         '../ThirdParty/gltfDefaults',
         '../ThirdParty/Uri',
         '../ThirdParty/when',
@@ -55,6 +63,7 @@ define([
         destroyObject,
         DeveloperError,
         Event,
+        FeatureDetection,
         getStringFromTypedArray,
         IndexDatatype,
         loadArrayBuffer,
@@ -69,11 +78,18 @@ define([
         Quaternion,
         Queue,
         RuntimeError,
+        Buffer,
         BufferUsage,
         DrawCommand,
+        RenderState,
+        Sampler,
+        ShaderProgram,
         ShaderSource,
+        Texture,
         TextureMinificationFilter,
         TextureWrap,
+        VertexArray,
+        WebGLConstants,
         gltfDefaults,
         Uri,
         when,
@@ -87,6 +103,12 @@ define([
         SceneMode) {
     "use strict";
     /*global WebGLRenderingContext*/
+
+    // Bail out if the browser doesn't support typed arrays, to prevent the setup function
+    // from failing, since we won't be able to create a WebGL context anyway.
+    if (!FeatureDetection.supportsTypedArrays()) {
+        return {};
+    }
 
     var yUpToZUp = Matrix4.fromRotationTranslation(Matrix3.fromRotationX(CesiumMath.PI_OVER_TWO));
     var boundingSphereCartesian3Scratch = new Cartesian3();
@@ -125,6 +147,10 @@ define([
 
         this.skinnedNodesNames = [];
     }
+
+    LoadResources.prototype.getBuffer = function(bufferView) {
+        return getSubarray(this.buffers[bufferView.buffer], bufferView.byteOffset, bufferView.byteLength);
+    };
 
     LoadResources.prototype.finishedPendingLoads = function() {
         return ((this.pendingBufferLoads === 0) &&
@@ -252,7 +278,7 @@ define([
      * @constructor
      *
      * @param {Object} [options] Object with the following properties:
-     * @param {Object|ArrayBuffer} [options.gltf] The object for the glTF JSON or an arraybuffer of Binary glTF defined by the CESIUM_binary_glTF extension.
+     * @param {Object|ArrayBuffer|Uint8Array} [options.gltf] The object for the glTF JSON or an arraybuffer of Binary glTF defined by the CESIUM_binary_glTF extension.
      * @param {String} [options.basePath=''] The base path that paths in the glTF JSON are relative to.
      * @param {Boolean} [options.show=true] Determines if the model primitive will be shown.
      * @param {Matrix4} [options.modelMatrix=Matrix4.IDENTITY] The 4x4 transformation matrix that transforms the model from model to world coordinates.
@@ -291,6 +317,10 @@ define([
 
             if (defined(gltf)) {
                 if (gltf instanceof ArrayBuffer) {
+                    gltf = new Uint8Array(gltf);
+                }
+
+                if (gltf instanceof Uint8Array) {
                     // Binary glTF
                     cachedGltf = new CachedGltf({
                         gltf : parseBinaryGltfHeader(gltf),
@@ -415,7 +445,7 @@ define([
          * @default false
          */
         this.debugShowBoundingVolume = defaultValue(options.debugShowBoundingVolume, false);
-        this._debugShowBoudingVolume = false;
+        this._debugShowBoundingVolume = false;
 
         /**
          * This property is for debugging only; it is not for production use nor is it optimized.
@@ -624,7 +654,7 @@ define([
          * </p>
          *
          * @memberof Model.prototype
-         * @type {Promise}
+         * @type {Promise.<Model>}
          * @readonly
          *
          * @example
@@ -695,18 +725,32 @@ define([
         return modelUri.resolve(docUri).toString();
     }
 
-    var sizeOfUnit32 = Uint32Array.BYTES_PER_ELEMENT;
+    var sizeOfUint32 = Uint32Array.BYTES_PER_ELEMENT;
 
-    function parseBinaryGltfHeader(arrayBuffer) {
-        var magic = getStringFromTypedArray(arrayBuffer, 0, 4);
-        if (magic !== 'glTF') {
+    /**
+     * This function differs from the normal subarray function
+     * because it takes offset and length, rather than begin and end.
+     */
+    function getSubarray(array, offset, length) {
+        return array.subarray(offset, offset + length);
+    }
+
+    function containsGltfMagic(uint8Array) {
+        if (uint8Array.byteLength < 4) {
+            return false;
+        }
+        return getStringFromTypedArray(uint8Array.subarray(0, 4)) === 'glTF';
+    }
+
+    function parseBinaryGltfHeader(uint8Array) {
+        if (!containsGltfMagic(uint8Array)) {
             throw new DeveloperError('bgltf is not a valid Binary glTF file.');
         }
 
-        var view = new DataView(arrayBuffer);
+        var view = new DataView(uint8Array.buffer, uint8Array.byteOffset, uint8Array.byteLength);
         var byteOffset = 0;
 
-        byteOffset += sizeOfUnit32;  // Skip magic number
+        byteOffset += sizeOfUint32; // Skip magic number
 
         //>>includeStart('debug', pragmas.debug);
         var version = view.getUint32(byteOffset, true);
@@ -714,17 +758,18 @@ define([
             throw new DeveloperError('Only glTF Binary version 1 is supported.  Version ' + version + ' is not.');
         }
         //>>includeEnd('debug');
-        byteOffset += sizeOfUnit32;
+        byteOffset += sizeOfUint32;
 
-        byteOffset += sizeOfUnit32;  // Skip length
+        byteOffset += sizeOfUint32; // Skip length
 
         var jsonOffset = view.getUint32(byteOffset, true);
-        byteOffset += sizeOfUnit32;
+        byteOffset += sizeOfUint32;
 
         var jsonLength = view.getUint32(byteOffset, true);
-        byteOffset += sizeOfUnit32;
+        byteOffset += sizeOfUint32;
 
-        return JSON.parse(getStringFromTypedArray(arrayBuffer, jsonOffset, jsonLength));
+        var json = getStringFromTypedArray(getSubarray(uint8Array, jsonOffset, jsonLength));
+        return JSON.parse(json);
     }
 
     /**
@@ -769,7 +814,7 @@ define([
      * var origin = Cesium.Cartesian3.fromDegrees(-95.0, 40.0, 200000.0);
      * var modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(origin);
      *
-     * var model = scene.primitives.add(Model.fromGltf({
+     * var model = scene.primitives.add(Cesium.Model.fromGltf({
      *   url : './duck/duck.gltf',
      *   show : true,                     // default
      *   modelMatrix : modelMatrix,
@@ -818,14 +863,14 @@ define([
             gltfCache[cacheKey] = cachedGltf;
 
             loadArrayBuffer(url, options.headers).then(function(arrayBuffer) {
-                var magic = getStringFromTypedArray(arrayBuffer, 0, Math.min(4, arrayBuffer.byteLength));
-                if (magic === 'glTF') {
+                var array = new Uint8Array(arrayBuffer);
+                if (containsGltfMagic(array)) {
                     // Load binary glTF
-                    cachedGltf.makeReady(parseBinaryGltfHeader(arrayBuffer), arrayBuffer);
+                    cachedGltf.makeReady(parseBinaryGltfHeader(array), array);
                 } else {
                     // Load text (JSON) glTF
-                    var data = getStringFromTypedArray(arrayBuffer, 0, arrayBuffer.byteLength);
-                    cachedGltf.makeReady(JSON.parse(data));
+                    var json = getStringFromTypedArray(array);
+                    cachedGltf.makeReady(JSON.parse(json));
                 }
             }).otherwise(getFailedLoadFunction(model, 'model', url));
         } else if (!cachedGltf.ready) {
@@ -979,7 +1024,7 @@ define([
     function bufferLoad(model, name) {
         return function(arrayBuffer) {
             var loadResources = model._loadResources;
-            loadResources.buffers[name] = arrayBuffer;
+            loadResources.buffers[name] = new Uint8Array(arrayBuffer);
             --loadResources.pendingBufferLoads;
          };
     }
@@ -1011,7 +1056,7 @@ define([
         var bufferViews = model.gltf.bufferViews;
         for (var name in bufferViews) {
             if (bufferViews.hasOwnProperty(name)) {
-                if (bufferViews[name].target === WebGLRenderingContext.ARRAY_BUFFER) {
+                if (bufferViews[name].target === WebGLConstants.ARRAY_BUFFER) {
                     model._loadResources.buffersToCreate.enqueue(name);
                 }
             }
@@ -1243,10 +1288,8 @@ define([
             return;
         }
 
-        var raw;
         var bufferView;
         var bufferViews = model.gltf.bufferViews;
-        var buffers = loadResources.buffers;
         var rendererBuffers = model._rendererResources.buffers;
 
         while (loadResources.buffersToCreate.length > 0) {
@@ -1254,8 +1297,11 @@ define([
             bufferView = bufferViews[bufferViewName];
 
             // Only ARRAY_BUFFER here.  ELEMENT_ARRAY_BUFFER created below.
-            raw = new Uint8Array(buffers[bufferView.buffer], bufferView.byteOffset, bufferView.byteLength);
-            var vertexBuffer = context.createVertexBuffer(raw, BufferUsage.STATIC_DRAW);
+            var vertexBuffer = Buffer.createVertexBuffer({
+                context : context,
+                typedArray : loadResources.getBuffer(bufferView),
+                usage : BufferUsage.STATIC_DRAW
+            });
             vertexBuffer.vertexArrayDestroyable = false;
             rendererBuffers[bufferViewName] = vertexBuffer;
         }
@@ -1269,9 +1315,13 @@ define([
                 var accessor = accessors[name];
                 bufferView = bufferViews[accessor.bufferView];
 
-                if ((bufferView.target === WebGLRenderingContext.ELEMENT_ARRAY_BUFFER) && !defined(rendererBuffers[accessor.bufferView])) {
-                    raw = new Uint8Array(buffers[bufferView.buffer], bufferView.byteOffset, bufferView.byteLength);
-                    var indexBuffer = context.createIndexBuffer(raw, BufferUsage.STATIC_DRAW, accessor.componentType);
+                if ((bufferView.target === WebGLConstants.ELEMENT_ARRAY_BUFFER) && !defined(rendererBuffers[accessor.bufferView])) {
+                    var indexBuffer = Buffer.createIndexBuffer({
+                        context : context,
+                        typedArray : loadResources.getBuffer(bufferView),
+                        usage : BufferUsage.STATIC_DRAW,
+                        indexDatatype : accessor.componentType
+                    });
                     indexBuffer.vertexArrayDestroyable = false;
                     rendererBuffers[accessor.bufferView] = indexBuffer;
                     // In theory, several glTF accessors with different componentTypes could
@@ -1298,11 +1348,11 @@ define([
             return shader.source;
         }
 
-        var buffers = model._loadResources.buffers;
+        var loadResources = model._loadResources;
         var gltf = model.gltf;
         var bufferView = gltf.bufferViews[shader.bufferView];
 
-        return getStringFromTypedArray(buffers[bufferView.buffer], bufferView.byteOffset, bufferView.byteLength);
+        return getStringFromTypedArray(loadResources.getBuffer(bufferView));
     }
 
     function createProgram(name, model, context) {
@@ -1314,7 +1364,12 @@ define([
         var vs = getShaderSource(model, shaders[program.vertexShader]);
         var fs = getShaderSource(model, shaders[program.fragmentShader]);
 
-        model._rendererResources.programs[name] = context.createShaderProgram(vs, fs, attributeLocations);
+        model._rendererResources.programs[name] = ShaderProgram.fromCache({
+            context : context,
+            vertexShaderSource : vs,
+            fragmentShaderSource : fs,
+            attributeLocations : attributeLocations
+        });
 
         if (model.allowPicking) {
             // PERFORMANCE_IDEA: Can optimize this shader with a glTF hint. https://github.com/KhronosGroup/glTF/issues/181
@@ -1322,7 +1377,13 @@ define([
                 sources : [fs],
                 pickColorQualifier : 'uniform'
             });
-            model._rendererResources.pickPrograms[name] = context.createShaderProgram(vs, pickFS, attributeLocations);
+
+            model._rendererResources.pickPrograms[name] = ShaderProgram.fromCache({
+                context : context,
+                vertexShaderSource : vs,
+                fragmentShaderSource : pickFS,
+                attributeLocations : attributeLocations
+            });
         }
     }
 
@@ -1377,13 +1438,12 @@ define([
         while (loadResources.texturesToCreateFromBufferView.length > 0) {
             var gltfTexture = loadResources.texturesToCreateFromBufferView.dequeue();
 
-            var buffers = loadResources.buffers;
             var gltf = model.gltf;
             var bufferView = gltf.bufferViews[gltfTexture.bufferView];
 
             var onload = getOnImageCreatedFromTypedArray(loadResources, gltfTexture);
             var onerror = getFailedLoadFunction(model, 'image', 'name: ' + gltfTexture.name + ', bufferView: ' + gltfTexture.bufferView);
-            loadImageFromTypedArray(buffers[bufferView.buffer], bufferView.byteOffset, bufferView.byteLength, gltfTexture.mimeType).
+            loadImageFromTypedArray(loadResources.getBuffer(bufferView), gltfTexture.mimeType).
                 then(onload).otherwise(onerror);
 
             ++loadResources.pendingBufferViewToImage;
@@ -1402,7 +1462,7 @@ define([
                 if (samplers.hasOwnProperty(name)) {
                     var sampler = samplers[name];
 
-                    rendererSamplers[name] = context.createSampler({
+                    rendererSamplers[name] = new Sampler({
                         wrapS : sampler.wrapS,
                         wrapT : sampler.wrapT,
                         minificationFilter : sampler.minFilter,
@@ -1446,8 +1506,9 @@ define([
 
         var tx;
 
-        if (texture.target === WebGLRenderingContext.TEXTURE_2D) {
-            tx = context.createTexture2D({
+        if (texture.target === WebGLConstants.TEXTURE_2D) {
+            tx = new Texture({
+                context : context,
                 source : source,
                 pixelFormat : texture.internalFormat,
                 pixelDatatype : texture.type,
@@ -1742,7 +1803,11 @@ define([
 
                     var accessor = accessors[primitive.indices];
                     var indexBuffer = rendererBuffers[accessor.bufferView];
-                    rendererVertexArrays[meshName + '.primitive.' + i] = context.createVertexArray(attrs, indexBuffer);
+                    rendererVertexArrays[meshName + '.primitive.' + i] = new VertexArray({
+                        context : context,
+                        attributes : attrs,
+                        indexBuffer : indexBuffer
+                    });
                 }
             }
         }
@@ -1751,11 +1816,11 @@ define([
     function getBooleanStates(states) {
         // GLTF_SPEC: SAMPLE_ALPHA_TO_COVERAGE not used by Cesium
         var booleanStates = {};
-        booleanStates[WebGLRenderingContext.BLEND] = false;
-        booleanStates[WebGLRenderingContext.CULL_FACE] = false;
-        booleanStates[WebGLRenderingContext.DEPTH_TEST] = false;
-        booleanStates[WebGLRenderingContext.POLYGON_OFFSET_FILL] = false;
-        booleanStates[WebGLRenderingContext.SCISSOR_TEST] = false;
+        booleanStates[WebGLConstants.BLEND] = false;
+        booleanStates[WebGLConstants.CULL_FACE] = false;
+        booleanStates[WebGLConstants.DEPTH_TEST] = false;
+        booleanStates[WebGLConstants.POLYGON_OFFSET_FILL] = false;
+        booleanStates[WebGLConstants.SCISSOR_TEST] = false;
 
         var enable = states.enable;
         var length = enable.length;
@@ -1784,32 +1849,32 @@ define([
                     var statesFunctions = defaultValue(states.functions, defaultValue.EMPTY_OBJECT);
                     var blendColor = defaultValue(statesFunctions.blendColor, [0.0, 0.0, 0.0, 0.0]);
                     var blendEquationSeparate = defaultValue(statesFunctions.blendEquationSeparate, [
-                        WebGLRenderingContext.FUNC_ADD,
-                        WebGLRenderingContext.FUNC_ADD]);
+                        WebGLConstants.FUNC_ADD,
+                        WebGLConstants.FUNC_ADD]);
                     var blendFuncSeparate = defaultValue(statesFunctions.blendFuncSeparate, [
-                        WebGLRenderingContext.ONE,
-                        WebGLRenderingContext.ONE,
-                        WebGLRenderingContext.ZERO,
-                        WebGLRenderingContext.ZERO]);
+                        WebGLConstants.ONE,
+                        WebGLConstants.ONE,
+                        WebGLConstants.ZERO,
+                        WebGLConstants.ZERO]);
                     var colorMask = defaultValue(statesFunctions.colorMask, [true, true, true, true]);
                     var depthRange = defaultValue(statesFunctions.depthRange, [0.0, 1.0]);
                     var polygonOffset = defaultValue(statesFunctions.polygonOffset, [0.0, 0.0]);
                     var scissor = defaultValue(statesFunctions.scissor, [0.0, 0.0, 0.0, 0.0]);
 
-                    rendererRenderStates[name] = context.createRenderState({
-                        frontFace : defined(statesFunctions.frontFace) ? statesFunctions.frontFace[0] : WebGLRenderingContext.CCW,
+                    rendererRenderStates[name] = RenderState.fromCache({
+                        frontFace : defined(statesFunctions.frontFace) ? statesFunctions.frontFace[0] : WebGLConstants.CCW,
                         cull : {
-                            enabled : booleanStates[WebGLRenderingContext.CULL_FACE],
-                            face : defined(statesFunctions.cullFace) ? statesFunctions.cullFace[0] : WebGLRenderingContext.BACK
+                            enabled : booleanStates[WebGLConstants.CULL_FACE],
+                            face : defined(statesFunctions.cullFace) ? statesFunctions.cullFace[0] : WebGLConstants.BACK
                         },
                         lineWidth : defined(statesFunctions.lineWidth) ? statesFunctions.lineWidth[0] : 1.0,
                         polygonOffset : {
-                            enabled : booleanStates[WebGLRenderingContext.POLYGON_OFFSET_FILL],
+                            enabled : booleanStates[WebGLConstants.POLYGON_OFFSET_FILL],
                             factor : polygonOffset[0],
                             units : polygonOffset[1]
                         },
                         scissorTest : {
-                            enabled : booleanStates[WebGLRenderingContext.SCISSOR_TEST],
+                            enabled : booleanStates[WebGLConstants.SCISSOR_TEST],
                             rectangle : {
                                 x : scissor[0],
                                 y : scissor[1],
@@ -1822,8 +1887,8 @@ define([
                             far : depthRange[1]
                         },
                         depthTest : {
-                            enabled : booleanStates[WebGLRenderingContext.DEPTH_TEST],
-                            func : defined(statesFunctions.depthFunc) ? statesFunctions.depthFunc[0] : WebGLRenderingContext.LESS
+                            enabled : booleanStates[WebGLConstants.DEPTH_TEST],
+                            func : defined(statesFunctions.depthFunc) ? statesFunctions.depthFunc[0] : WebGLConstants.LESS
                         },
                         colorMask : {
                             red : colorMask[0],
@@ -1833,7 +1898,7 @@ define([
                         },
                         depthMask : defined(statesFunctions.depthMask) ? statesFunctions.depthMask[0] : true,
                         blending : {
-                            enabled : booleanStates[WebGLRenderingContext.BLEND],
+                            enabled : booleanStates[WebGLConstants.BLEND],
                             color : {
                                 red : blendColor[0],
                                 green : blendColor[1],
@@ -2028,22 +2093,22 @@ define([
 
     // this check must use typeof, not defined, because defined doesn't work with undeclared variables.
     if (typeof WebGLRenderingContext !== 'undefined') {
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT] = getScalarUniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_VEC2] = getVec2UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_VEC3] = getVec3UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_VEC4] = getVec4UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.INT] = getScalarUniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.INT_VEC2] = getVec2UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.INT_VEC3] = getVec3UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.INT_VEC4] = getVec4UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.BOOL] = getScalarUniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.BOOL_VEC2] = getVec2UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.BOOL_VEC3] = getVec3UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.BOOL_VEC4] = getVec4UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_MAT2] = getMat2UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_MAT3] = getMat3UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.FLOAT_MAT4] = getMat4UniformFunction;
-        gltfUniformFunctions[WebGLRenderingContext.SAMPLER_2D] = getTextureUniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT] = getScalarUniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_VEC2] = getVec2UniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_VEC3] = getVec3UniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_VEC4] = getVec4UniformFunction;
+        gltfUniformFunctions[WebGLConstants.INT] = getScalarUniformFunction;
+        gltfUniformFunctions[WebGLConstants.INT_VEC2] = getVec2UniformFunction;
+        gltfUniformFunctions[WebGLConstants.INT_VEC3] = getVec3UniformFunction;
+        gltfUniformFunctions[WebGLConstants.INT_VEC4] = getVec4UniformFunction;
+        gltfUniformFunctions[WebGLConstants.BOOL] = getScalarUniformFunction;
+        gltfUniformFunctions[WebGLConstants.BOOL_VEC2] = getVec2UniformFunction;
+        gltfUniformFunctions[WebGLConstants.BOOL_VEC3] = getVec3UniformFunction;
+        gltfUniformFunctions[WebGLConstants.BOOL_VEC4] = getVec4UniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_MAT2] = getMat2UniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_MAT3] = getMat3UniformFunction;
+        gltfUniformFunctions[WebGLConstants.FLOAT_MAT4] = getMat4UniformFunction;
+        gltfUniformFunctions[WebGLConstants.SAMPLER_2D] = getTextureUniformFunction;
         // GLTF_SPEC: Support SAMPLER_CUBE. https://github.com/KhronosGroup/glTF/issues/40
     }
 
