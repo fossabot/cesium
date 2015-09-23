@@ -10,7 +10,7 @@ yum -y install nodejs npm
 #
 # Ant
 #
-curl -L http://psg.mtu.edu/pub/apache/ant/binaries/apache-ant-1.9.5-bin.tar.gz -o /tmp/ant.tar.gz
+curl -L https://www.apache.org/dist/ant/binaries/apache-ant-1.9.5-bin.tar.gz -o /tmp/ant.tar.gz
 tar xvf /tmp/ant.tar.gz -C /tmp
 rm -rf /tmp/ant.tar.gz
 
