@@ -1,3 +1,5 @@
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmonikazibolyte%2Fcesium.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmonikazibolyte%2Fcesium?ref=badge_shield)
+
 <p align="center">
 <img src="https://github.com/AnalyticalGraphicsInc/cesium/wiki/logos/Cesium_Logo_Color.jpg" width="50%" />
 </p>
@@ -21,6 +23,9 @@ Our mission is to create the leading web-based globe and map for visualizing dyn
 [Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0.html).  Cesium is free for both commercial and non-commercial use.
 
 We appreciate attribution by including the Cesium logo and link in your app.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmonikazibolyte%2Fcesium.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmonikazibolyte%2Fcesium?ref=badge_large)
 
 ### Featured Demos ###
 
@@ -48,4 +53,3 @@ We appreciate attribution by including the Cesium logo and link in your app.
 <a href="http://cesiumjs.org/demos/vega.html"><img src="http://cesiumjs.org/demos/images/vega.png" height="150" /></a>&nbsp;
 <a href="http://cesiumjs.org/Cesium/Build/Apps/CesiumViewer/"><img src="http://cesiumjs.org/images/CesiumViewer.png" height="150" /></a>&nbsp;
 </p>
-
